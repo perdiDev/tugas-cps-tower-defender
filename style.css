@@ -1,0 +1,253 @@
+/* ========================================
+   TANK FIRING SIMULATOR - STYLESHEET
+   Dark theme with military-inspired UI
+   ======================================== */
+
+/* Reset & Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Courier New', monospace;
+    background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+    color: #00ff00;
+    overflow: hidden;
+    height: 100vh;
+}
+
+/* Main Container */
+#container {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    gap: 0;
+}
+
+/* Viewport Styling */
+.viewport {
+    position: relative;
+    height: 100%;
+    border: 2px solid rgba(0, 255, 0, 0.3);
+    box-shadow: inset 0 0 20px rgba(0, 255, 0, 0.1);
+}
+
+#viewport-left {
+    width: 60%;
+    border-right: 1px solid rgba(0, 255, 0, 0.5);
+}
+
+#viewport-right {
+    width: 40%;
+    /* Removed background to eliminate green fog/overlay */
+}
+
+/* Canvas Styling */
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Viewport Labels */
+.viewport-label {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 8px 16px;
+    border: 1px solid #00ff00;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: #00ff00;
+    text-shadow: 0 0 10px #00ff00;
+}
+
+/* Crosshair Container */
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    pointer-events: none;
+    transition: all 0.3s ease;
+}
+
+/* Crosshair Lines */
+.crosshair-horizontal,
+.crosshair-vertical {
+    position: absolute;
+    background: white;
+    transition: background-color 0.3s ease;
+}
+
+.crosshair-horizontal {
+    width: 100%;
+    height: 2px;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+}
+
+.crosshair-vertical {
+    width: 2px;
+    height: 100%;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+}
+
+/* Crosshair Center Dot */
+#crosshair::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px;
+    height: 4px;
+    background: white;
+    border-radius: 50%;
+    transition: background-color 0.3s ease;
+}
+
+/* Locked State */
+#crosshair.locked .crosshair-horizontal,
+#crosshair.locked .crosshair-vertical,
+#crosshair.locked::before {
+    background: #00ff00;
+    box-shadow: 0 0 10px #00ff00;
+}
+
+/* Lock Status Text */
+#lock-status {
+    position: absolute;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    color: white;
+    transition: color 0.3s ease;
+}
+
+#crosshair.locked #lock-status {
+    color: #00ff00;
+    text-shadow: 0 0 10px #00ff00;
+}
+
+/* Controls Panel */
+#controls-panel {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(0, 255, 0, 0.5);
+    padding: 15px 20px;
+    min-width: 200px;
+}
+
+#controls-panel h3 {
+    font-size: 14px;
+    margin-bottom: 10px;
+    color: #00ff00;
+    letter-spacing: 2px;
+    border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+    padding-bottom: 5px;
+}
+
+#controls-panel ul {
+    list-style: none;
+}
+
+#controls-panel li {
+    font-size: 12px;
+    margin: 8px 0;
+    color: #aaffaa;
+}
+
+#controls-panel strong {
+    color: #00ff00;
+    background: rgba(0, 255, 0, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-right: 5px;
+}
+
+/* Fire Button */
+#fire-button {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+    color: white;
+    border: 3px solid #ff0000;
+    padding: 15px 40px;
+    font-size: 18px;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 3px;
+    cursor: pointer;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+    transition: all 0.2s ease;
+}
+
+#fire-button:hover {
+    background: linear-gradient(135deg, #ff3333 0%, #ff0000 100%);
+    box-shadow: 0 0 30px rgba(255, 0, 0, 0.8);
+    transform: scale(1.05);
+}
+
+#fire-button:active {
+    transform: scale(0.95);
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+}
+
+/* Status Panel */
+#status-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(0, 255, 0, 0.5);
+    padding: 15px 20px;
+    min-width: 150px;
+}
+
+#status-panel div {
+    font-size: 12px;
+    margin: 5px 0;
+    color: #00ff00;
+    letter-spacing: 1px;
+}
+
+#hits {
+    font-size: 16px;
+    font-weight: bold;
+    text-shadow: 0 0 5px #00ff00;
+}
+
+/* Animation for Hit Flash */
+@keyframes hitFlash {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.hit-flash {
+    animation: hitFlash 0.3s ease-in-out 2;
+}

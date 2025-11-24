@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tank Firing Simulator - Three.js</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Main Container -->
+    <div id="container">
+        <!-- Left Viewport: External/Third-person View -->
+        <div id="viewport-left" class="viewport">
+            <canvas id="canvas-left"></canvas>
+            <div class="viewport-label">EXTERNAL VIEW</div>
+        </div>
+
+        <!-- Right Viewport: Target/Scope View -->
+        <div id="viewport-right" class="viewport">
+            <canvas id="canvas-right"></canvas>
+            <div class="viewport-label">SCOPE VIEW</div>
+
+            <!-- Crosshair Overlay -->
+            <div id="crosshair">
+                <div class="crosshair-horizontal"></div>
+                <div class="crosshair-vertical"></div>
+                <div id="lock-status">SCANNING</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control Instructions -->
+    <div id="controls-panel">
+        <h3>CONTROLS</h3>
+        <ul>
+            <li><strong>← →</strong> Rotate Turret</li>
+            <li><strong>↑ ↓</strong> Pitch Cannon</li>
+            <li><strong>SPACE</strong> Fire Cannon</li>
+        </ul>
+    </div>
+
+    <!-- Fire Button -->
+    <button id="fire-button">FIRE</button>
+
+    <!-- Status Display -->
+    <div id="status-panel">
+        <div id="ammo-count">AMMO: ∞</div>
+        <div id="hit-count">HITS: <span id="hits">0</span></div>
+    </div>
+
+    <!-- Three.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
+
+    <!-- Main Script -->
+    <script src="script.js"></script>
+</body>
+
+</html>
