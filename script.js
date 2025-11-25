@@ -36,6 +36,17 @@ let keys = {
     space: false
 };
 
+// Arduino State
+let serialPort = null;
+let serialReader = null;
+let arduinoState = {
+    pot: 512,
+    left: 0,
+    right: 0,
+    fire: 0,
+    lastFire: 0
+};
+
 // Game State
 let hitCount = 0;
 let airplaneHealth = 3;
@@ -311,6 +322,9 @@ function setupEventListeners() {
     // Fire button
     document.getElementById('fire-button').addEventListener('click', fireProjectile);
 
+    // Connect Arduino button
+    document.getElementById('connect-button').addEventListener('click', connectArduino);
+
     // Window resize
     window.addEventListener('resize', onWindowResize);
 }
@@ -401,18 +415,108 @@ function onWindowResize() {
 }
 
 // ============================================
+// ARDUINO SERIAL CONNECTION
+// ============================================
+
+/**
+ * Connect to Arduino via Web Serial API
+ */
+async function connectArduino() {
+    if (!navigator.serial) {
+        alert("Web Serial API not supported in this browser. Use Chrome or Edge.");
+        return;
+    }
+
+    try {
+        // Request port
+        serialPort = await navigator.serial.requestPort();
+        await serialPort.open({ baudRate: 9600 });
+
+        const button = document.getElementById('connect-button');
+        button.textContent = "CONNECTED";
+        button.style.background = "#00aa00";
+
+        // Start reading loop
+        readSerialLoop();
+
+    } catch (error) {
+        console.error("Arduino connection error:", error);
+        alert("Failed to connect: " + error.message);
+    }
+}
+
+/**
+ * Read data loop from serial port
+ */
+async function readSerialLoop() {
+    const textDecoder = new TextDecoderStream();
+    const readableStreamClosed = serialPort.readable.pipeTo(textDecoder.writable);
+    const reader = textDecoder.readable.getReader();
+    serialReader = reader;
+
+    let buffer = "";
+
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += value;
+
+            // Process lines
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // Keep incomplete line in buffer
+
+            for (const line of lines) {
+                parseArduinoData(line.trim());
+            }
+        }
+    } catch (error) {
+        console.error("Serial read error:", error);
+    } finally {
+        reader.releaseLock();
+    }
+}
+
+/**
+ * Parse incoming Arduino data string
+ * Format: "pot,left,right,fire" (e.g., "512,0,0,1")
+ */
+function parseArduinoData(data) {
+    const parts = data.split(',');
+    if (parts.length !== 4) return;
+
+    const pot = parseInt(parts[0]);
+    const left = parseInt(parts[1]);
+    const right = parseInt(parts[2]);
+    const fire = parseInt(parts[3]);
+
+    // Update state
+    arduinoState.pot = pot;
+    arduinoState.left = left;
+    arduinoState.right = right;
+
+    // Fire logic (edge detection)
+    if (fire === 1 && arduinoState.lastFire === 0) {
+        fireProjectile();
+    }
+    arduinoState.lastFire = fire;
+    arduinoState.fire = fire;
+}
+
+// ============================================
 // CONTROL & UPDATE LOGIC
 // ============================================
 
 /**
- * Update turret rotation based on input
+ * Update turret rotation based on input (Keyboard + Arduino)
  */
 function updateControls() {
     // Yaw Control (Horizontal)
-    if (keys.left) {
+    if (keys.left || arduinoState.left) {
         turret.yaw += TURRET_ROTATION_SPEED;
     }
-    if (keys.right) {
+    if (keys.right || arduinoState.right) {
         turret.yaw -= TURRET_ROTATION_SPEED;
     }
 
@@ -420,11 +524,23 @@ function updateControls() {
     turret.head.rotation.y = turret.yaw;
 
     // Pitch Control (Vertical)
+    // Keyboard
     if (keys.up) {
         turret.pitch += TURRET_PITCH_SPEED;
     }
     if (keys.down) {
         turret.pitch -= TURRET_PITCH_SPEED;
+    }
+
+    // Arduino Potentiometer Override (if connected)
+    if (serialPort) {
+        // Map 0-1023 to MIN_PITCH - MAX_PITCH
+        // Invert logic: 0 = Down, 1023 = Up
+        const t = arduinoState.pot / 1023.0;
+        const targetPitch = MIN_PITCH + (MAX_PITCH - MIN_PITCH) * t;
+
+        // Smoothly interpolate to target pitch to avoid jitter
+        turret.pitch = turret.pitch * 0.8 + targetPitch * 0.2;
     }
 
     // Clamp Pitch
