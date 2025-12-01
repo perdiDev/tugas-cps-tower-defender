@@ -32,21 +32,15 @@ void loop() {
   // Read Potentiometer (0-1023)
   int potValue = analogRead(PIN_POT);
   int potValue2 = analogRead(PIN_POT2);
-  
-  Serial.println(potValue2);
 
-  // Read Buttons (LOW when pressed due to INPUT_PULLUP)
-  // We invert them so 1 = pressed, 0 = released
-  int leftState = !digitalRead(PIN_BTN_LEFT);
-  int rightState = !digitalRead(PIN_BTN_RIGHT);
+  // Read Fire Button
   int fireState = !digitalRead(PIN_BTN_FIRE);
   
   // Send data as comma-separated string
+  // Format: potPitch,potYaw,fire
   Serial.print(potValue);
   Serial.print(",");
-  Serial.print(leftState);
-  Serial.print(",");
-  Serial.print(rightState);
+  Serial.print(potValue2);
   Serial.print(",");
   Serial.println(fireState);
   

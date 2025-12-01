@@ -24,8 +24,11 @@ let ground = null;
 let projectiles = [];
 
 // Raycasting & Target Lock
+// Raycasting & Target Lock
 let raycaster = new THREE.Raycaster();
 let isTargetLocked = false;
+let isAutoTargeting = false; // Auto-targeting state
+let clock = new THREE.Clock(); // Clock for time-based animation
 
 // Input State
 let keys = {
@@ -33,7 +36,9 @@ let keys = {
     right: false,
     up: false,
     down: false,
-    space: false
+    down: false,
+    space: false,
+    t: false // Toggle auto-targeting
 };
 
 // Arduino State
@@ -41,8 +46,7 @@ let serialPort = null;
 let serialReader = null;
 let arduinoState = {
     pot: 512,
-    left: 0,
-    right: 0,
+    potYaw: 512,
     fire: 0,
     lastFire: 0
 };
@@ -61,6 +65,7 @@ const PROJECTILE_SPEED = 1.5;
 const TURRET_POSITION = new THREE.Vector3(0, 0, 0);
 // Lowered airplane slightly and moved closer for better visibility
 const AIRPLANE_POSITION = new THREE.Vector3(0, 25, -60);
+let zoomLevel = 15; // Initial zoom distance for external camera
 
 // ============================================
 // INITIALIZATION FUNCTIONS
@@ -217,6 +222,7 @@ function createAirplane() {
     // Make airplane larger and more visible
 
     // Fuselage - White for visibility
+    // Align along Z axis (nose at +Z, tail at -Z)
     const fuselageGeometry = new THREE.CylinderGeometry(1, 1, 12, 16);
     const fuselageMaterial = new THREE.MeshStandardMaterial({
         color: 0xffffff, // White
@@ -225,10 +231,11 @@ function createAirplane() {
         emissive: 0x222222
     });
     const fuselage = new THREE.Mesh(fuselageGeometry, fuselageMaterial);
-    fuselage.rotation.z = Math.PI / 2;
+    fuselage.rotation.x = Math.PI / 2; // Cylinder default is Y-up, rotate to Z-aligned
     airplaneGroup.add(fuselage);
 
     // Wings - Red accents
+    // Wings extend along X axis
     const wingGeometry = new THREE.BoxGeometry(24, 0.4, 4);
     const wingMaterial = new THREE.MeshStandardMaterial({
         color: 0xff0000, // Red
@@ -236,13 +243,13 @@ function createAirplane() {
         metalness: 0.5
     });
     const wing = new THREE.Mesh(wingGeometry, wingMaterial);
-    wing.position.y = 0;
+    wing.position.set(0, 0, 2); // Slightly forward
     airplaneGroup.add(wing);
 
     // Tail
     const tailGeometry = new THREE.BoxGeometry(6, 4, 0.4);
     const tail = new THREE.Mesh(tailGeometry, wingMaterial);
-    tail.position.set(-5, 2, 0);
+    tail.position.set(0, 2, -5); // Back and up
     airplaneGroup.add(tail);
 
     // Cockpit
@@ -253,8 +260,8 @@ function createAirplane() {
         metalness: 0.9
     });
     const cockpit = new THREE.Mesh(cockpitGeometry, cockpitMaterial);
-    cockpit.position.set(2, 1, 0);
-    cockpit.scale.set(1.5, 1, 1);
+    cockpit.position.set(0, 1, 3); // Forward and up
+    cockpit.scale.set(1, 1, 1.5);
     airplaneGroup.add(cockpit);
 
     airplane = airplaneGroup;
@@ -327,6 +334,19 @@ function setupEventListeners() {
 
     // Window resize
     window.addEventListener('resize', onWindowResize);
+
+    // Zoom control
+    window.addEventListener('wheel', onMouseWheel);
+}
+
+/**
+ * Handle mouse wheel for zoom
+ */
+function onMouseWheel(event) {
+    // Zoom in/out
+    zoomLevel += event.deltaY * 0.05;
+    // Clamp zoom
+    zoomLevel = Math.max(5, Math.min(50, zoomLevel));
 }
 
 /**
@@ -361,6 +381,22 @@ function onKeyDown(event) {
                 fireProjectile();
             }
             break;
+        case 't':
+        case 'T':
+            if (!keys.t) {
+                keys.t = true;
+                isAutoTargeting = !isAutoTargeting;
+                const lockStatus = document.getElementById('lock-status');
+                if (isAutoTargeting) {
+                    lockStatus.textContent = "AUTO-TARGETING ACTIVE";
+                    lockStatus.style.color = "#00ff00";
+                } else {
+                    lockStatus.textContent = "SCANNING";
+                    lockStatus.style.color = "#ff0000";
+                }
+                console.log("Auto-targeting:", isAutoTargeting);
+            }
+            break;
     }
 }
 
@@ -391,6 +427,10 @@ function onKeyUp(event) {
             break;
         case ' ':
             keys.space = false;
+            break;
+        case 't':
+        case 'T':
+            keys.t = false;
             break;
     }
 }
@@ -484,17 +524,15 @@ async function readSerialLoop() {
  */
 function parseArduinoData(data) {
     const parts = data.split(',');
-    if (parts.length !== 4) return;
+    if (parts.length !== 3) return;
 
     const pot = parseInt(parts[0]);
-    const left = parseInt(parts[1]);
-    const right = parseInt(parts[2]);
-    const fire = parseInt(parts[3]);
+    const potYaw = parseInt(parts[1]);
+    const fire = parseInt(parts[2]);
 
     // Update state
     arduinoState.pot = pot;
-    arduinoState.left = left;
-    arduinoState.right = right;
+    arduinoState.potYaw = potYaw;
 
     // Fire logic (edge detection)
     if (fire === 1 && arduinoState.lastFire === 0) {
@@ -513,10 +551,10 @@ function parseArduinoData(data) {
  */
 function updateControls() {
     // Yaw Control (Horizontal)
-    if (keys.left || arduinoState.left) {
+    if (keys.left) {
         turret.yaw += TURRET_ROTATION_SPEED;
     }
-    if (keys.right || arduinoState.right) {
+    if (keys.right) {
         turret.yaw -= TURRET_ROTATION_SPEED;
     }
 
@@ -533,7 +571,22 @@ function updateControls() {
     }
 
     // Arduino Potentiometer Override (if connected)
+    // Arduino Potentiometer Override (if connected)
     if (serialPort) {
+        // Yaw Control (Velocity)
+        // Center ~512. < 480 = Left, > 540 = Right
+        const yawVal = arduinoState.potYaw;
+        if (yawVal < 480) {
+            // Map 480-0 to 0-1 speed
+            const speed = (480 - yawVal) / 480.0;
+            turret.yaw += TURRET_ROTATION_SPEED * speed * 2.0; // 2x multiplier for responsiveness
+        } else if (yawVal > 540) {
+            // Map 540-1023 to 0-1 speed
+            const speed = (yawVal - 540) / (1023 - 540);
+            turret.yaw -= TURRET_ROTATION_SPEED * speed * 2.0;
+        }
+
+        // Pitch Control (Absolute)
         // Map 0-1023 to MIN_PITCH - MAX_PITCH
         // Invert logic: 0 = Down, 1023 = Up
         const t = arduinoState.pot / 1023.0;
@@ -547,6 +600,128 @@ function updateControls() {
     turret.pitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, turret.pitch));
 
     // Apply Pitch (Negative X rotation for upward tilt in Three.js)
+    turret.pivot.rotation.x = -turret.pitch;
+}
+
+/**
+ * Update airplane position (fly around)
+ */
+function updateAirplane(deltaTime) {
+    if (!airplane || !airplane.visible) return;
+
+    const time = clock.getElapsedTime();
+
+    // Circular path parameters
+    const radius = 80;
+    const speed = 0.5;
+    const height = 30;
+
+    // Calculate new position
+    const x = Math.sin(time * speed) * radius;
+    const z = Math.cos(time * speed) * radius - 40; // Offset z to keep it in front mostly
+    const y = height + Math.sin(time * speed * 2) * 10; // Bob up and down slightly
+
+    // Update position
+    airplane.position.set(x, y, z);
+
+    // Rotate to face direction of movement
+    // Tangent vector of circle is (-cos, sin)
+    // We can just look at the next position
+    const nextX = Math.sin((time + 0.1) * speed) * radius;
+    const nextZ = Math.cos((time + 0.1) * speed) * radius - 40;
+    const nextY = height + Math.sin((time + 0.1) * speed * 2) * 10;
+
+    airplane.lookAt(nextX, nextY, nextZ);
+
+    // BANKING (Roll)
+    // Bank into the turn. For a left turn (counter-clockwise), we bank left (negative Z rotation local).
+    // Our path is clockwise or counter-clockwise?
+    // x = sin(t), z = cos(t). This is clockwise looking from top?
+    // Let's just calculate a bank angle based on the "centripetal" feel.
+    // Fixed bank for circular motion is simple and effective.
+    // We can also add some dynamic banking based on the "bobbing" (Y change).
+
+    const bankAngle = -Math.PI / 4; // 45 degrees bank
+    // We need to apply this LOCALLY. lookAt resets rotation.
+    airplane.rotateZ(bankAngle);
+}
+
+/**
+ * Handle Auto-Targeting Logic with Prediction
+ */
+function updateAutoTargeting() {
+    if (!isAutoTargeting || !airplane || !airplane.visible) return;
+
+    // 1. Calculate Target Velocity
+    // We need the velocity vector to predict where it will be.
+    // Since we don't store velocity explicitly on the airplane object in a physics way,
+    // we can calculate it from the parametric equation derivative or finite difference.
+    // Parametric derivative is cleaner.
+
+    const time = clock.getElapsedTime();
+    const speed = 0.5;
+    const radius = 80;
+
+    // Position derivatives (velocity)
+    // x = sin(t*s) * r  => vx = cos(t*s) * s * r
+    // z = cos(t*s) * r  => vz = -sin(t*s) * s * r
+    // y = ...           => vy = ...
+
+    const vx = Math.cos(time * speed) * speed * radius;
+    const vz = -Math.sin(time * speed) * speed * radius;
+    const vy = Math.cos(time * speed * 2) * speed * 2 * 10;
+
+    const targetVelocity = new THREE.Vector3(vx, vy, vz);
+
+    // 2. Predictive Aiming
+    // We want to hit the target at some future time t.
+    // FuturePos = CurrentPos + TargetVel * t
+    // ProjectilePos = TurretPos + MuzzleVel * t
+    // We need to solve for t such that |FuturePos - TurretPos| = ProjectileSpeed * t
+    // This is a quadratic equation, but for simplicity, we can approximate t
+    // based on current distance and projectile speed.
+
+    const currentDist = airplane.position.distanceTo(turret.head.position);
+    const timeToImpact = currentDist / PROJECTILE_SPEED;
+
+    // Predict future position
+    const futurePos = airplane.position.clone().add(targetVelocity.multiplyScalar(timeToImpact));
+
+    // Aim at FUTURE position
+    const targetPos = futurePos;
+
+    // 3. Calculate Yaw (Horizontal)
+    const dx = targetPos.x - turret.head.position.x;
+    const dz = targetPos.z - turret.head.position.z;
+
+    let targetYaw = Math.atan2(dx, dz);
+
+    // Smoothly interpolate yaw
+    let yawDiff = targetYaw - turret.yaw;
+    while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+    while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+
+    turret.yaw += yawDiff * 0.1;
+
+    // Apply Yaw
+    turret.head.rotation.y = turret.yaw;
+
+    // 4. Calculate Pitch (Vertical)
+    const distXZ = Math.sqrt(dx * dx + dz * dz);
+    const dy = targetPos.y - turret.head.position.y;
+
+    // Ballistic arc correction?
+    // Projectiles fly straight in this sim (no gravity on projectiles yet),
+    // so we just aim directly at the predicted point.
+    let targetPitch = Math.atan2(dy, distXZ);
+
+    // Clamp pitch
+    targetPitch = Math.max(MIN_PITCH, Math.min(MAX_PITCH, targetPitch));
+
+    // Smoothly interpolate pitch
+    turret.pitch += (targetPitch - turret.pitch) * 0.1;
+
+    // Apply Pitch
     turret.pivot.rotation.x = -turret.pitch;
 }
 
@@ -585,7 +760,7 @@ function updateTargetLock() {
  */
 function updateExternalCamera() {
     // Position camera relative to turret yaw
-    const offset = new THREE.Vector3(0, 8, 15);
+    const offset = new THREE.Vector3(0, zoomLevel * 0.6, zoomLevel);
     offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), turret.yaw * 0.5); // Rotate partially with turret
 
     const targetPos = turret.head.position.clone().add(offset);
@@ -839,7 +1014,16 @@ function animate() {
     requestAnimationFrame(animate);
 
     // Update controls and logic
-    updateControls();
+    // Move airplane
+    updateAirplane();
+
+    // Auto-targeting
+    if (isAutoTargeting) {
+        updateAutoTargeting();
+    } else {
+        updateControls(); // Only allow manual control if auto-targeting is OFF
+    }
+
     updateTargetLock();
     updateExternalCamera();
     updateProjectiles();
