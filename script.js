@@ -726,25 +726,40 @@ function updateAutoTargeting() {
 }
 
 /**
- * Update target lock detection using raycasting
+ * Update target lock detection using frustum (entire view)
  */
 function updateTargetLock() {
-    // Since scope camera is attached to the cannon, we can just raycast from its center
-    raycaster.setFromCamera(new THREE.Vector2(0, 0), scopeCamera);
-
-    // Check if ray intersects with airplane
-    const intersects = raycaster.intersectObject(airplane, true);
+    // Use frustum instead of raycaster for wider lock area
+    const frustum = new THREE.Frustum();
+    const projectionMatrix = new THREE.Matrix4().multiplyMatrices(
+        scopeCamera.projectionMatrix,
+        scopeCamera.matrixWorldInverse
+    );
+    frustum.setFromProjectionMatrix(projectionMatrix);
 
     const crosshair = document.getElementById('crosshair');
     const lockStatus = document.getElementById('lock-status');
 
-    if (intersects.length > 0 && airplane.visible) {
+    // Check if airplane is in the camera frustum
+    if (frustum.containsPoint(airplane.position) && airplane.visible) {
         // Target is locked
         if (!isTargetLocked) {
             isTargetLocked = true;
             crosshair.classList.add('locked');
             lockStatus.textContent = 'TARGET LOCKED';
         }
+
+        // Project airplane position to screen coordinates
+        const airplaneScreenPos = airplane.position.clone();
+        airplaneScreenPos.project(scopeCamera);
+
+        // Convert from NDC (-1 to 1) to percentage (0% to 100%)
+        const x = ((airplaneScreenPos.x + 1) / 2) * 100;
+        const y = ((-airplaneScreenPos.y + 1) / 2) * 100;
+
+        // Move crosshair to airplane position
+        crosshair.style.left = `${x}%`;
+        crosshair.style.top = `${y}%`;
     } else {
         // Target not in sight
         if (isTargetLocked) {
@@ -752,8 +767,13 @@ function updateTargetLock() {
             crosshair.classList.remove('locked');
             lockStatus.textContent = 'SCANNING';
         }
+
+        // Reset crosshair to center
+        crosshair.style.left = '50%';
+        crosshair.style.top = '50%';
     }
 }
+
 
 /**
  * Update external camera to follow turret loosely
@@ -816,7 +836,9 @@ function fireProjectile() {
     projectiles.push({
         mesh: projectile,
         direction: direction,
-        lifetime: 0
+        lifetime: 0,
+        isHoming: isTargetLocked, // Make it homing if target is locked
+        target: isTargetLocked ? airplane : null
     });
 
     // Visual/audio feedback
@@ -836,6 +858,18 @@ function fireProjectile() {
 function updateProjectiles() {
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const proj = projectiles[i];
+
+        // Homing behavior
+        if (proj.isHoming && proj.target && proj.target.visible) {
+            // Calculate direction to target
+            const targetDir = new THREE.Vector3()
+                .subVectors(proj.target.position, proj.mesh.position)
+                .normalize();
+
+            // Steer towards target (lerp for smooth turning)
+            proj.direction.lerp(targetDir, 0.08); // Turn rate
+            proj.direction.normalize();
+        }
 
         // Move projectile
         proj.mesh.position.add(proj.direction.clone().multiplyScalar(PROJECTILE_SPEED));
