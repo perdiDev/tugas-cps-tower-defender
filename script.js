@@ -68,6 +68,90 @@ const AIRPLANE_POSITION = new THREE.Vector3(0, 25, -60);
 let zoomLevel = 15; // Initial zoom distance for external camera
 
 // ============================================
+// SOUND MANAGER
+// ============================================
+const SoundManager = {
+    ctx: null,
+
+    init: function () {
+        if (!this.ctx) {
+            window.AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    },
+
+    playShoot: function () {
+        this.init();
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(880, t);
+        osc.frequency.exponentialRampToValueAtTime(110, t + 0.15);
+
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+
+        osc.start(t);
+        osc.stop(t + 0.15);
+    },
+
+    playExplosion: function (scale = 1.0) {
+        this.init();
+        const t = this.ctx.currentTime;
+
+        // Noise buffer for explosion
+        const bufferSize = this.ctx.sampleRate * 0.5 * scale;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const noiseFilter = this.ctx.createBiquadFilter();
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.setValueAtTime(1000, t);
+        noiseFilter.frequency.exponentialRampToValueAtTime(100, t + 0.5 * scale);
+
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.5 * scale, t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.5 * scale);
+
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(this.ctx.destination);
+        noise.start(t);
+
+        // Low frequency oscillator for "thud"
+        const osc = this.ctx.createOscillator();
+        const oscGain = this.ctx.createGain();
+
+        osc.connect(oscGain);
+        oscGain.connect(this.ctx.destination);
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.exponentialRampToValueAtTime(10, t + 0.3 * scale);
+
+        oscGain.gain.setValueAtTime(0.5 * scale, t);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.3 * scale);
+
+        osc.start(t);
+        osc.stop(t + 0.3 * scale);
+    }
+};
+
+// ============================================
 // INITIALIZATION FUNCTIONS
 // ============================================
 
@@ -842,6 +926,7 @@ function fireProjectile() {
     });
 
     // Visual/audio feedback
+    SoundManager.playShoot();
     flashFireButton();
 
     // Recoil animation (simple)
@@ -978,6 +1063,7 @@ function respawnAirplane() {
  * @param {number} scale Scale of the explosion
  */
 function createExplosion(position, scale = 1.0) {
+    SoundManager.playExplosion(scale);
     const particleCount = 30 * scale;
     const particles = [];
 
