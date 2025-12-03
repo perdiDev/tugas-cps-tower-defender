@@ -1,4 +1,11 @@
-# AA Turret Simulator
+# Anti-Aircraft Turret Simulator
+
+---
+## Anggota Kelompok
+1. Perdi - D121221015
+2. Muh. Ali Assad - D121221006
+
+---
 
 ## 1. Penjelasan Proyek
 AA Turret Simulator adalah sebuah simulasi 3D interaktif yang memungkinkan pengguna untuk mengendalikan sebuah menara anti-pesawat (Anti-Aircraft Turret) untuk menembak jatuh target pesawat yang terbang di sekitar area. Proyek ini menggabungkan visualisasi grafis 3D berbasis web dengan kontrol fisik menggunakan perangkat keras Arduino.
@@ -55,3 +62,9 @@ Jika ingin menggunakan kontroler fisik, rangkai komponen dengan konfigurasi pin 
 | Push Button | D2 | Tombol Tembak (Fire) |
 
 *Catatan: Tombol menggunakan mode INPUT_PULLUP, sehingga harus terhubung ke Ground saat ditekan.*
+
+## 5. Rangkaian Hardware
+![Rangkaian Hardware](./assets/Rangkaian.png)
+
+## 6. Tampilan Website
+![Tampilan Website](./assets/Tampilan%20Website.png)
